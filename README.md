@@ -12,7 +12,7 @@ vidi.h is a single header-file library that simplifies integration of V4L2 into 
 		.width = 640,
 		.height = 480,
 		.frames_per_sec = 60,
-		.path = argv[1]
+		.path = "/dev/video0"
 	};
 
 	// vidi_config is used to open and configure the camera
