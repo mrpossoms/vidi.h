@@ -61,7 +61,7 @@ int vidi_config(vidi_cfg_t* cfg)
 
 	// If this is not an open fd do the opening and
 	// setup needed.
-	if (fd < 0)
+	if (fd <= 0)
 	{
 		fd = cfg->sys.fd = open(cfg->path, O_RDWR);
 

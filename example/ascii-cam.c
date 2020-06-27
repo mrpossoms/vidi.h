@@ -1,5 +1,5 @@
+#include <assert.h>
 #include "vidi.h"
-
 
 int main (int argc, const char* argv[])
 {
@@ -7,10 +7,10 @@ int main (int argc, const char* argv[])
 		.width = 640,
 		.height = 480,
 		.frames_per_sec = 60,
-		.path = "/dev/vidio0"
+		.path = argv[1]
 	};
 
-	vidi_config(&cam);
+	assert(0 == vidi_config(&cam));
 		
 	return 0;
 }

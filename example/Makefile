@@ -1,5 +1,6 @@
 INC=-I../inc/
+CFLAGS+=-g
 LINK=
 
 ascii-cam:
-	$(CC) $(INC) $@.c -o $@ $(LINK)
+	$(CC) $(CFLAGS) $(INC) $@.c -o $@ $(LINK)
