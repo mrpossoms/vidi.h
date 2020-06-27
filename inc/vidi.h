@@ -1,15 +1,21 @@
 #ifndef __VIDI_H__
 #define __VIDI_H__
 
-#ifdef __linux__
+#include <strings.h>
+
+#include <fcntl.h>
+#include <stddef.h>
+
+#include <sys/mman.h>
+#include <sys/types.h>
+#include <sys/ioctl.h>
+
 #include <linux/videodev2.h>
 #include <inttypes.h>
-#include <sys/types.h>
-#endif
 
 typedef struct {
 	int width, height;
-	int frame_rate;
+	int frames_per_sec;
 	const char* path;
 
 	struct {
@@ -18,12 +24,26 @@ typedef struct {
 		struct {
 			void* frame[10];
 			size_t size[10];
+			struct v4l2_buffer info[10];
 			size_t count;
-			struct v4l2_buffer info;
 		} buffer;
-		struct v4l2_buffer buffer_info;
 	} sys;
 } vidi_cfg_t;
+
+
+int vidi_request_frame(vidi_cfg_t* cfg)
+{
+	cfg->sys.buffer.info[0].type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	cfg->sys.buffer.info[0].memory = V4L2_MEMORY_MMAP;
+
+	return ioctl(cfg->sys.fd, VIDIOC_QBUF, &cfg->sys.buffer.info[0]);
+}
+
+
+int vidi_wait_frame(vidi_cfg_t* cfg)
+{
+	return ioctl(cfg->sys.fd, VIDIOC_DQBUF, &cfg->sys.buffer.info[0]);
+}
 
 /**
  * @brief      { function_description }
@@ -43,7 +63,7 @@ int vidi_config(vidi_cfg_t* cfg)
 	// setup needed.
 	if (fd < 0)
 	{
-		fd = cfg->sys.fd = open(path, O_RDWR);
+		fd = cfg->sys.fd = open(cfg->path, O_RDWR);
 
 		if(fd < 0)
 		{
@@ -82,7 +102,7 @@ int vidi_config(vidi_cfg_t* cfg)
 		parm.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 
 		parm.parm.capture.timeperframe.numerator = 1;
-		parm.parm.capture.timeperframe.denominator = cfg->frame_rate;
+		parm.parm.capture.timeperframe.denominator = cfg->frames_per_sec;
 
 		if(ioctl(fd, VIDIOC_S_PARM, &parm))
 		{
@@ -153,30 +173,15 @@ int vidi_config(vidi_cfg_t* cfg)
 		}
 	}
 
-	cam_wait_frame(&cam);
+	vidi_wait_frame(cfg);
 
-	int type = bufferinfo.type;
+	int type = cfg->sys.buffer.info[0].type;
 	if(ioctl(fd, VIDIOC_STREAMON, &type) < 0)
 	{
-		printf("Error starting streaming");
-		exit(-7);
+		return -11; // error starting streaming
 	}
+
 	return 0;
-}
-
-
-int vidi_request_frame(vidi_cfg_t* cfg)
-{
-	cfg->sys.buffer[0].info.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	cfg->sys.buffer[0].info.memory = V4L2_MEMORY_MMAP;
-
-	return ioctl(cfg->sys.fd, VIDIOC_QBUF, &cfg->sys.buffer[0].info);
-}
-
-
-int vidi_wait_frame(vidi_cfg_t* cfg)
-{
-	return ioctl(cfg->sys.fd, VIDIOC_DQBUF, &cfg->sys.buffer[0].info);
 }
 
 #endif
