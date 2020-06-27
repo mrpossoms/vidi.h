@@ -16,6 +16,7 @@
 typedef struct {
 	int width, height;
 	int frames_per_sec;
+	int pixel_format;
 	const char* path;
 
 	struct {
@@ -49,6 +50,13 @@ void* vidi_wait_frame(vidi_cfg_t* cfg)
 
 	return NULL;
 }
+
+
+size_t vidi_row_bytes(vidi_cfg_t* cfg)
+{
+	return cfg->sys.buffer.size[0] / cfg->height;
+}
+
 
 /**
  * @brief      { function_description }
@@ -92,8 +100,11 @@ int vidi_config(vidi_cfg_t* cfg)
 	{ // do configuration
 		struct v4l2_format format;
 
+		// if no format is selected, use rgb
+		if (0 == cfg->pixel_format) { cfg->pixel_format = V4L2_PIX_FMT_RGB24; }
+
 		format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-		format.fmt.pix.pixelformat = V4L2_PIX_FMT_RGB24;
+		format.fmt.pix.pixelformat = cfg->pixel_format;
 		format.fmt.pix.width = cfg->width;
 		format.fmt.pix.height = cfg->height;
 

@@ -1,5 +1,4 @@
 #include <assert.h>
-#include <time.h>
 #include <stdio.h>
 #include <string.h>
 #include "vidi.h"
@@ -13,6 +12,9 @@ typedef union {
 
 int main (int argc, const char* argv[])
 {
+	// define a configuration object for a camera, here
+	// you can request frame size, pixel format, frame rate
+	// and the camera which you wish to use.
 	vidi_cfg_t cam = {
 		.width = 640,
 		.height = 480,
@@ -20,21 +22,26 @@ int main (int argc, const char* argv[])
 		.path = argv[1]
 	};
 
+	// vidi_config is used to open and configure the camera
+	// device, but can also be used to reconfigure an
+	// existing vidi_cfg_t camera instance.
 	assert(0 == vidi_config(&cam));
 		
-
 	rgb_t frame[480][640] = {};
 	int rows_drawn = 0;
 
 	while (1)
 	{
-		time_t now = time(NULL);
+		// request the camera to capture a frame
 		vidi_request_frame(&cam);
-		vidi_wait_frame(&cam);
+
+		// this function blocks until a frame pointer is returned
+		uint8_t* raw_frame = vidi_wait_frame(&cam);
+		size_t row_size = vidi_row_bytes(&cam);
+
 		for (int r = 0; r < 480; r++)
 		{
-			size_t row_size = cam.sys.buffer.size[0] / 480;
-			memcpy(frame[r], cam.sys.buffer.frame[0] + (r * row_size), row_size);
+			memcpy(frame[r], raw_frame + (r * row_size), row_size);
 		}
 
 		{
