@@ -40,9 +40,14 @@ int vidi_request_frame(vidi_cfg_t* cfg)
 }
 
 
-int vidi_wait_frame(vidi_cfg_t* cfg)
+void* vidi_wait_frame(vidi_cfg_t* cfg)
 {
-	return ioctl(cfg->sys.fd, VIDIOC_DQBUF, &cfg->sys.buffer.info[0]);
+	if (0 == ioctl(cfg->sys.fd, VIDIOC_DQBUF, &cfg->sys.buffer.info[0]))
+	{
+		return cfg->sys.buffer.frame[0];
+	}
+
+	return NULL;
 }
 
 /**
