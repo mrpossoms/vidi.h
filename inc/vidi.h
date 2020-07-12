@@ -127,10 +127,11 @@ int vidi_config(vidi_cfg_t* cfg)
 	}
 
 	// Inform v4l about the buffers we want to receive data through
+	const size_t buf_count = 1;
 	struct v4l2_requestbuffers bufrequest = {};
 	bufrequest.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	bufrequest.memory = V4L2_MEMORY_MMAP;
-	bufrequest.count = cfg->sys.buffer.count = 2;
+	bufrequest.count = cfg->sys.buffer.count = buf_count;
 
 	if(ioctl(fd, VIDIOC_REQBUFS, &bufrequest) < 0)
 	{
@@ -138,7 +139,7 @@ int vidi_config(vidi_cfg_t* cfg)
 	}
 
 
-	if(bufrequest.count < 2)
+	if(bufrequest.count < buf_count)
 	{
 		return -8; // request buffer count insufficent
 	}
