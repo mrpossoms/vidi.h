@@ -39,7 +39,7 @@ typedef union {
 typedef union {
 	struct { 
 		uint8_t y, uv;
-	}
+	};
 	uint8_t v[2];	
 } vidi_yuyv_t;
 
@@ -212,9 +212,10 @@ int vidi_config(vidi_cfg_t* cfg)
 	return 0;
 }
 
-
 void vidi_yuyv_to_rgb(size_t r, size_t c, const vidi_yuyv_t from[r][c], vidi_rgb_t to[r][c])
 {
+#define B_CLAMP(x) ((x) > 255 ? 255 : ((x) < 0 ? 0 : (x)))
+
 	uint8_t u = from[0][0].uv, v = from[0][1].uv;
 
 	for(int ri = r; ri--;)
@@ -223,10 +224,15 @@ void vidi_yuyv_to_rgb(size_t r, size_t c, const vidi_yuyv_t from[r][c], vidi_rgb
 		int i = ri * c + ci;
 		int j = ri * (c >> 1) + (ci >> 1);
 
-		rgb[ri][ci].r = clamp(luma[i] + 1.14 * (uv[j].cb - 128));
-		rgb[ri][ci].g = clamp(luma[i] - 0.395 * (uv[j].cr - 128) - (0.581 * (uv[j].cb - 128)));
-		rgb[ri][ci].b = clamp(luma[i] + 2.033 * (uv[j].cr - 128));
+		uint8_t u = ci & 0x1 ? from[ri][ci - 1].uv : from[ri][ci].uv;
+		uint8_t v = ci & 0x1 ? from[ri][ci].uv : from[ri][ci + 1].uv;
+		uint8_t luma = from[ri][ci].y;
+
+		to[ri][ci].r = B_CLAMP(luma + 1.14 * (u - 128));
+		to[ri][ci].g = B_CLAMP(luma - 0.395 * (v - 128) - (0.581 * (u - 128)));
+		to[ri][ci].b = B_CLAMP(luma + 2.033 * (v - 128));
 	}
+#undef B_CLAMP
 }
 
 #endif
