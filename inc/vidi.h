@@ -31,6 +31,17 @@ typedef struct {
 	} sys;
 } vidi_cfg_t;
 
+typedef union {
+	struct { uint8_t r, g, b; };
+	uint8_t v[3];
+} vidi_rgb_t;
+
+typedef union {
+	struct { 
+		uint8_t y, uv;
+	}
+	uint8_t v[2];	
+} vidi_yuyv_t;
 
 int vidi_request_frame(vidi_cfg_t* cfg)
 {
@@ -199,6 +210,23 @@ int vidi_config(vidi_cfg_t* cfg)
 	}
 
 	return 0;
+}
+
+
+void vidi_yuyv_to_rgb(size_t r, size_t c, const vidi_yuyv_t from[r][c], vidi_rgb_t to[r][c])
+{
+	uint8_t u = from[0][0].uv, v = from[0][1].uv;
+
+	for(int ri = r; ri--;)
+	for(int ci = c; ci--;)
+	{
+		int i = ri * c + ci;
+		int j = ri * (c >> 1) + (ci >> 1);
+
+		rgb[ri][ci].r = clamp(luma[i] + 1.14 * (uv[j].cb - 128));
+		rgb[ri][ci].g = clamp(luma[i] - 0.395 * (uv[j].cr - 128) - (0.581 * (uv[j].cb - 128)));
+		rgb[ri][ci].b = clamp(luma[i] + 2.033 * (uv[j].cr - 128));
+	}
 }
 
 #endif
