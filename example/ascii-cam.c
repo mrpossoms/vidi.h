@@ -39,20 +39,22 @@ int main (int argc, const char* argv[])
 		uint8_t* raw_frame = vidi_wait_frame(&cam);
 		size_t row_size = vidi_row_bytes(&cam);
 
+		// copy the raw frame into the display frame
 		for (int r = 0; r < 480; r++)
 		{
 			memcpy(frame[r], raw_frame + (r * row_size), row_size);
 		}
 
-		{
+		{ // erase previously drawn rows
 			static char move_up[16] = {};
 			sprintf(move_up, "\033[%dA", rows_drawn);
 			fprintf(stderr, "%s", move_up);
 			rows_drawn = 0;
 		}
 
+		// write out rows of pixels mapping the 8-bit channels to
+		// the spectrum below.
 		const char spectrum[] = "  .,':;|[{+*x88";
-
 		for (int r = 0; r < 480; r += 15)
 		{
 			for (int c = 0; c < 640; c += 5)

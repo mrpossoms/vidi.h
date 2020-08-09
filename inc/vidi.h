@@ -224,8 +224,8 @@ void vidi_yuyv_to_rgb(size_t r, size_t c, const vidi_yuyv_t from[r][c], vidi_rgb
 		int i = ri * c + ci;
 		int j = ri * (c >> 1) + (ci >> 1);
 
-		uint8_t u = ci & 0x1 ? from[ri][ci - 1].uv : from[ri][ci].uv;
-		uint8_t v = ci & 0x1 ? from[ri][ci].uv : from[ri][ci + 1].uv;
+		uint8_t v = ci & 0x1 ? from[ri][ci - 1].uv : from[ri][ci].uv;
+		uint8_t u = ci & 0x1 ? from[ri][ci].uv : from[ri][ci + 1].uv;
 		uint8_t luma = from[ri][ci].y;
 
 		to[ri][ci].r = B_CLAMP(luma + 1.14 * (u - 128));
