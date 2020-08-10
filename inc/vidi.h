@@ -43,7 +43,7 @@ typedef union {
 	uint8_t v[2];	
 } vidi_yuyv_t;
 
-int vidi_request_frame(vidi_cfg_t* cfg)
+static int vidi_request_frame(vidi_cfg_t* cfg)
 {
 	cfg->sys.buffer.info[0].type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	cfg->sys.buffer.info[0].memory = V4L2_MEMORY_MMAP;
@@ -52,7 +52,7 @@ int vidi_request_frame(vidi_cfg_t* cfg)
 }
 
 
-void* vidi_wait_frame(vidi_cfg_t* cfg)
+static void* vidi_wait_frame(vidi_cfg_t* cfg)
 {
 	if (0 == ioctl(cfg->sys.fd, VIDIOC_DQBUF, &cfg->sys.buffer.info[0]))
 	{
@@ -63,7 +63,7 @@ void* vidi_wait_frame(vidi_cfg_t* cfg)
 }
 
 
-size_t vidi_row_bytes(vidi_cfg_t* cfg)
+static size_t vidi_row_bytes(vidi_cfg_t* cfg)
 {
 	return cfg->sys.buffer.size[0] / cfg->height;
 }
@@ -76,7 +76,7 @@ size_t vidi_row_bytes(vidi_cfg_t* cfg)
  *
  * @return     { description_of_the_return_value }
  */
-int vidi_config(vidi_cfg_t* cfg)
+static int vidi_config(vidi_cfg_t* cfg)
 {
 	if (NULL == cfg) { return -1; }
 
@@ -212,7 +212,18 @@ int vidi_config(vidi_cfg_t* cfg)
 	return 0;
 }
 
-void vidi_yuyv_to_rgb(size_t r, size_t c, const vidi_yuyv_t from[r][c], vidi_rgb_t to[r][c])
+static void vidi_bias(size_t r, size_t c, const vidi_rgb_t from[r][c], vidi_rgb_t to[r][c], int bias)
+{
+	for(int ri = r; ri--;)
+	for(int ci = c; ci--;)
+	{
+		to[ri][ci].r = from[ri][ci].r + bias;
+		to[ri][ci].g = from[ri][ci].g + bias;
+		to[ri][ci].b = from[ri][ci].b + bias;
+	}
+}
+
+static void vidi_yuyv_to_rgb(size_t r, size_t c, const vidi_yuyv_t from[r][c], vidi_rgb_t to[r][c])
 {
 #define B_CLAMP(x) ((x) > 255 ? 255 : ((x) < 0 ? 0 : (x)))
 
