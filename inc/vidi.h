@@ -13,12 +13,26 @@
 #include <linux/videodev2.h>
 #include <inttypes.h>
 
+#ifndef DISABLE_LIBAV
+#include <unistd.h>
+#include "libavcodec/avcodec.h"
+#include "libavutil/common.h"
+#include "libavutil/imgutils.h"
+#include "libavutil/mathematics.h"
+#define INBUF_SIZE 4096
+#endif
+
+typedef enum {
+	VIDI_V4L2 = 0,
+	VIDI_LIBAV = 1,
+} vidi_src_t;
+
 typedef struct {
 	int width, height;
 	int frames_per_sec;
 	int pixel_format;
 	const char* path;
-
+	vidi_src_t src_type;
 	struct {
 		int fd;
 		int last_width, last_height;
@@ -28,6 +42,18 @@ typedef struct {
 			struct v4l2_buffer info[10];
 			size_t count;
 		} buffer;
+
+#ifndef DISABLE_LIBAV
+		// https://libav.org/documentation/doxygen/master/decode_video_8c-example.html
+		struct {
+			AVCodecContext* dec_ctx;
+			const AVCodec *codec;
+			AVCodecParserContext* parser;
+			AVFrame* frame;
+			AVPacket* pkt;
+		} av;
+#endif
+
 	} sys;
 } vidi_cfg_t;
 
@@ -43,6 +69,7 @@ typedef union {
 	uint8_t v[2];	
 } vidi_yuyv_t;
 
+
 static int vidi_request_frame(vidi_cfg_t* cfg)
 {
 	cfg->sys.buffer.info[0].type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -54,9 +81,58 @@ static int vidi_request_frame(vidi_cfg_t* cfg)
 
 static void* vidi_wait_frame(vidi_cfg_t* cfg)
 {
-	if (0 == ioctl(cfg->sys.fd, VIDIOC_DQBUF, &cfg->sys.buffer.info[0]))
+	uint8_t inbuf[INBUF_SIZE + AV_INPUT_BUFFER_PADDING_SIZE] = {};
+
+	switch(cfg->src_type)
 	{
-		return cfg->sys.buffer.frame[0];
+		case VIDI_V4L2:
+		{
+			if (0 == ioctl(cfg->sys.fd, VIDIOC_DQBUF, &cfg->sys.buffer.info[0]))
+			{
+				return cfg->sys.buffer.frame[0];
+			}
+
+			return NULL;
+		}
+		case VIDI_LIBAV:
+		{
+			while (1)
+			{
+				/* read raw data from the input file */
+				ssize_t data_size = read(cfg->sys.fd, inbuf, INBUF_SIZE);
+				if (!data_size) { break; }
+				/* use the parser to split the data into frames */
+				uint8_t* data = inbuf;
+				while (data_size > 0)
+				{
+					int ret = av_parser_parse2(
+						cfg->sys.av.parser,
+						cfg->sys.av.dec_ctx,
+						&cfg->sys.av.pkt->data,
+						&cfg->sys.av.pkt->size,
+						data,
+						data_size,
+						AV_NOPTS_VALUE,
+						AV_NOPTS_VALUE,
+						0
+					);
+
+					if (ret < 0)
+					{
+						fprintf(stderr, "Error while parsing\n");
+						exit(1);
+					}
+
+					data      += ret;
+					data_size -= ret;
+
+					if (cfg->sys.av.pkt->size)
+					{
+						// decode(cfg->sys.av.dec_ctx, cfg->sys.av.frame, cfg->sys.av.pkt, outfilename);
+					}
+				}
+			}
+		}
 	}
 
 	return NULL;
@@ -69,44 +145,26 @@ static size_t vidi_row_bytes(vidi_cfg_t* cfg)
 }
 
 
-/**
- * @brief      { function_description }
- *
- * @param      settings  The settings
- *
- * @return     { description_of_the_return_value }
- */
-static int vidi_config(vidi_cfg_t* cfg)
+static int _vidi_check_src(vidi_cfg_t* cfg)
 {
-	if (NULL == cfg) { return -1; }
-
-	int fd = cfg->sys.fd;
-	int res = 0;
-
-	// If this is not an open fd do the opening and
-	// setup needed.
-	if (fd <= 0)
-	{
-		fd = cfg->sys.fd = open(cfg->path, O_RDWR);
-
-		if(fd < 0)
-		{
-			return -2;
-		}
-
 		struct v4l2_capability cap;
 
-		res = ioctl(fd, VIDIOC_QUERYCAP, &cap);
-		if(res < 0)
+		int res = ioctl(cfg->sys.fd, VIDIOC_QUERYCAP, &cap);
+		if(0 == res)
 		{
-			return -3;
+			if((cap.capabilities & V4L2_CAP_VIDEO_CAPTURE))
+			{
+				return VIDI_V4L2;
+			}
 		}
 
-		if(!(cap.capabilities & V4L2_CAP_VIDEO_CAPTURE))
-		{
-			return -4; // lacks video capability
-		}		
-	}
+		// fallback to decoding a video file
+		return VIDI_LIBAV;
+}
+
+
+static int _vidi_v4l2_cfg(vidi_cfg_t* cfg, int fd)
+{
 
 	{ // do configuration
 		struct v4l2_format format;
@@ -194,7 +252,7 @@ static int vidi_config(vidi_cfg_t* cfg)
 
 			bzero(cfg->sys.buffer.frame[i], cfg->sys.buffer.size[i]);
 
-			res = ioctl(fd, VIDIOC_QBUF, &bufferinfo);
+			int res = ioctl(fd, VIDIOC_QBUF, &bufferinfo);
 			// if (res) printf("cam_open(): VIDIOC_QBUF");
 
 			cfg->sys.buffer.info[i] = bufferinfo;
@@ -208,8 +266,85 @@ static int vidi_config(vidi_cfg_t* cfg)
 	{
 		return -11; // error starting streaming
 	}
+}
+
+#ifndef DISABLE_LIBAV
+static int _vidi_libav_cfg(vidi_cfg_t* cfg, int fd)
+{
+	uint8_t inbuf[INBUF_SIZE + AV_INPUT_BUFFER_PADDING_SIZE] = {};
+
+	avcodec_register_all();
+	cfg->sys.av.pkt = av_packet_alloc();
+	if (!cfg->sys.av.pkt) { return -1; }
+	/* set end of buffer to 0 (this ensures that no overreading happens for damaged MPEG streams) */
+	memset(inbuf + INBUF_SIZE, 0, AV_INPUT_BUFFER_PADDING_SIZE);
+	/* find the MPEG-1 video decoder */
+	AVCodecContext* codec = cfg->sys.av.codec = avcodec_find_decoder(AV_CODEC_ID_MPEG1VIDEO);
+	if (!codec)
+	{
+		fprintf(stderr, "codec not found\n");
+		return -2;
+	}
+	AVCodecParserContext* parser = cfg->sys.av.parser = av_parser_init(cfg->sys.av.codec->id);
+	if (!parser)
+	{
+		fprintf(stderr, "parser not found\n");
+		return -3;
+	}
+	AVCodecContext *c = cfg->sys.av.dec_ctx = avcodec_alloc_context3(codec);
+	AVFrame* picture = cfg->sys.av.frame = av_frame_alloc();
+	/* For some codecs, such as msmpeg4 and mpeg4, width and height
+	   MUST be initialized there because this information is not
+	   available in the bitstream. */
+	/* open it */
+	if (avcodec_open2(c, codec, NULL) < 0)
+	{
+		fprintf(stderr, "could not open codec\n");
+		return -4;
+	}
 
 	return 0;
+}
+#else
+static int _vidi_libav_cfg(vidi_cfg_t* cfg, int fd) { return -100; }	
+#endif
+
+
+/**
+ * @brief      { function_description }
+ *
+ * @param      settings  The settings
+ *
+ * @return     { description_of_the_return_value }
+ */
+static int vidi_config(vidi_cfg_t* cfg)
+{
+	if (NULL == cfg) { return -1; }
+
+	int fd = cfg->sys.fd;
+	int res = 0;
+
+	// If this is not an open fd do the opening and
+	// setup needed.
+	if (fd <= 0)
+	{
+		fd = cfg->sys.fd = open(cfg->path, O_RDWR);
+
+		if(fd < 0)
+		{
+			return -2;
+		}
+	}
+
+	switch (cfg->src_type = _vidi_check_src(cfg))
+	{
+		case VIDI_V4L2:
+			return _vidi_v4l2_cfg(cfg, fd);
+		case VIDI_LIBAV:
+			return _vidi_libav_cfg(cfg, fd);
+		default:
+			return -101;
+	}
 }
 
 static void vidi_bias(size_t r, size_t c, const vidi_rgb_t from[r][c], vidi_rgb_t to[r][c], int bias)
