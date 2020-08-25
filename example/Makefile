@@ -1,6 +1,6 @@
 INC=-I../inc/
 CFLAGS+=-g
-LINK=
+LINK=-lavcodec -lavutil
 
 glfw-cam: glfw-cam.c
 	$(CC) $(CFLAGS) $(INC) $^ -o $@ $(LINK) -lglfw -lGL -lX11 -lXi -lXrandr -lXxf86vm -lXinerama -lXcursor -lrt -lm

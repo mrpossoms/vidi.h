@@ -47,7 +47,7 @@ typedef struct {
 		// https://libav.org/documentation/doxygen/master/decode_video_8c-example.html
 		struct {
 			AVCodecContext* dec_ctx;
-			const AVCodec *codec;
+			AVCodec *codec;
 			AVCodecParserContext* parser;
 			AVFrame* frame;
 			AVPacket* pkt;
@@ -128,7 +128,40 @@ static void* vidi_wait_frame(vidi_cfg_t* cfg)
 
 					if (cfg->sys.av.pkt->size)
 					{
-						// decode(cfg->sys.av.dec_ctx, cfg->sys.av.frame, cfg->sys.av.pkt, outfilename);
+						int ret;
+						ret = avcodec_send_packet(cfg->sys.av.dec_ctx, cfg->sys.av.pkt);
+						if (ret < 0)
+						{
+							fprintf(stderr, "Error sending a packet for decoding\n");
+							exit(1);
+						}
+						while (ret >= 0)
+						{
+							ret = avcodec_receive_frame(cfg->sys.av.dec_ctx, cfg->sys.av.frame);
+							if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
+							{
+								break;
+							}
+							else if (ret < 0)
+							{
+								fprintf(stderr, "Error during decoding\n");
+								exit(1);
+							}
+							
+							/* the picture is allocated by the decoder. no need to
+							   free it */
+							// snprintf(buf, sizeof(buf), filename, cfg->sys.av.dec_ctx->frame_number);
+							// pgm_save(frame->data[0], frame->linesize[0],
+							// 		 frame->width, frame->height, buf);
+
+							cfg->width = cfg->sys.av.frame->width;
+							cfg->height = cfg->sys.av.frame->height;
+
+							printf("frame %3d (%dx%d)\n", cfg->sys.av.dec_ctx->frame_number, cfg->width, cfg->height);
+							fflush(stdout);
+
+							return cfg->sys.av.frame->data[0]; // return frame
+						}
 					}
 				}
 			}
@@ -141,7 +174,15 @@ static void* vidi_wait_frame(vidi_cfg_t* cfg)
 
 static size_t vidi_row_bytes(vidi_cfg_t* cfg)
 {
-	return cfg->sys.buffer.size[0] / cfg->height;
+	switch(cfg->src_type)
+	{
+		case VIDI_V4L2:
+			return cfg->sys.buffer.size[0] / cfg->height;
+		case VIDI_LIBAV:
+			return cfg->sys.av.frame->linesize[0];
+	}
+
+	return 0;
 }
 
 
@@ -279,7 +320,7 @@ static int _vidi_libav_cfg(vidi_cfg_t* cfg, int fd)
 	/* set end of buffer to 0 (this ensures that no overreading happens for damaged MPEG streams) */
 	memset(inbuf + INBUF_SIZE, 0, AV_INPUT_BUFFER_PADDING_SIZE);
 	/* find the MPEG-1 video decoder */
-	AVCodecContext* codec = cfg->sys.av.codec = avcodec_find_decoder(AV_CODEC_ID_MPEG1VIDEO);
+	AVCodec* codec = cfg->sys.av.codec = avcodec_find_decoder(AV_CODEC_ID_MPEG1VIDEO);
 	if (!codec)
 	{
 		fprintf(stderr, "codec not found\n");
