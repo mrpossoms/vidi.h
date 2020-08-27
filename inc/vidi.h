@@ -157,7 +157,7 @@ static void* vidi_wait_frame(vidi_cfg_t* cfg)
 							cfg->width = cfg->sys.av.frame->width;
 							cfg->height = cfg->sys.av.frame->height;
 
-							printf("frame %3d (%dx%d)\n", cfg->sys.av.dec_ctx->frame_number, cfg->width, cfg->height);
+							printf("frame %3d format: %d (%dx%d)\n", cfg->sys.av.dec_ctx->frame_number, cfg->sys.av.frame->format == AV_PIX_FMT_YUV420P, cfg->width, cfg->height);
 							fflush(stdout);
 
 							return cfg->sys.av.frame->data[0]; // return frame

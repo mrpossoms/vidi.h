@@ -107,25 +107,26 @@ int main(int argc, char* argv[])
 		size_t row_size = vidi_row_bytes(&cam);
 		
 		// copy the raw frame into the YUYV frame
-		vidi_yuyv_t yuyv_frame[FRAME_H][FRAME_W];
-		for (int r = 0; r < FRAME_H; r++)
+		// vidi_yuyv_t yuyv_frame[FRAME_H][FRAME_W];
+		uint8_t yuyv_frame[cam.height][cam.width];
+		for (int r = 0; r < cam.height; r++)
 		{
 			memcpy(yuyv_frame[r], raw_frame + (r * row_size), row_size);
 		}
 
-		vidi_rgb_t rgb_frame[FRAME_H][FRAME_W];
-		vidi_yuyv_to_rgb(FRAME_H, FRAME_W, yuyv_frame, rgb_frame);
+		// vidi_rgb_t rgb_frame[FRAME_H][FRAME_W];
+		// vidi_yuyv_to_rgb(FRAME_H, FRAME_W, yuyv_frame, rgb_frame);
 
 		glTexImage2D(
 			GL_TEXTURE_2D,
 			0,
-			GL_RGB,
-			FRAME_W,
-			FRAME_H,
+			GL_RED,
+			cam.width,
+			cam.height,
 			0,
-			GL_RGB,
+			GL_RED,
 			GL_UNSIGNED_BYTE,
-			rgb_frame
+			yuyv_frame
 		);
 
 		glClear(GL_COLOR_BUFFER_BIT);

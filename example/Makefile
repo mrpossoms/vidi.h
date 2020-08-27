@@ -10,4 +10,4 @@ ascii-cam: ascii-cam.c
 
 .PHONY: clean
 clean:
-	rm glfw-cam ascii-cam
+	rm -f glfw-cam ascii-cam
